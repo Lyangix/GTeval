@@ -1,0 +1,13 @@
+.gitignore
+README.md
+MANIFEST.txt
+R/preprocessing.R
+R/mixed_model.R
+R/transfer_learning.R
+R/simulation.R
+docs/USAGE.md
+docs/METHODS.md
+docs/PUBLISHING.md
+examples/run_simulation.R
+tests/run_tests.R
+tools/build_release.py
