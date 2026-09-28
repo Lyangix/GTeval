@@ -19,7 +19,7 @@ Rscript --vanilla examples/run_simulation.R
 The example generates 240 subjects and 80 independent SNPs with invented PRS
 weights. It runs the full workflow, prints results, and writes five summary CSVs
 to `outputs/`. It uses 3 outer and 3 inner folds for speed; the CV function
-defaults to 5 of each. Tested with R 4.4.0, gaston 1.6, and glmnet 4.1-8.
+defaults to 5 of each.
 
 | File | Purpose |
 | --- | --- |
