@@ -1,0 +1,10 @@
+"Trait","Threshold","P_value_threshold","LD_r2_threshold","Source_file","n_SNPs"
+"Height","GWS",5e-08,0.1,"PRS_pruned_GWS.txt",2313
+"Height","Suggestive",1e-05,0.5,"PRS_pruned_Suggestive.txt",16020
+"Height","Liberal",0.001,0.5,"PRS_pruned_Liberal.txt",30937
+"BMI","GWS",5e-08,0.1,"PRS_pruned_GWS_bmi.txt",435
+"BMI","Suggestive",1e-05,0.5,"PRS_pruned_Suggestive_bmi.txt",4788
+"BMI","Liberal",0.001,0.5,"PRS_pruned_Liberal_bmi.txt",13980
+"WHR","GWS",5e-08,0.1,"PRS_prunedGWS_whr.txt",172
+"WHR","Suggestive",1e-05,0.5,"PRS_prunedSuggestive_whr.txt",1991
+"WHR","Liberal",0.001,0.5,"PRS_prunedLiberal_whr.txt",7485
