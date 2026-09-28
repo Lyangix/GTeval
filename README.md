@@ -5,7 +5,7 @@ adjust a phenotype, estimate genetic variance components, and adapt an existing
 PRS with ridge or lasso SNP effects.
 
 The [SNP lists](snp_lists/README.md) include variant IDs, alleles, and source-GWAS
-weights for Height, BMI, and WHR. No participant-level data are included.
+weights for Height, BMI, and WHR.
 
 ## Run the simulation
 
@@ -40,12 +40,7 @@ G <- G[match(dat$id, rownames(G)), , drop = FALSE]
 ```
 
 IDs must be unique and matched. Outcome, PRS, treatment, group, and adjustment
-columns must be complete. Genotypes may contain `NA`; missing dosages are
-mean-imputed and constant/all-missing SNPs are dropped. Each training group needs
-enough subjects for the adjustment regression. Use independent subjects and
-non-collinear covariates; related subjects or repeated measures need a different
-fold design. These functions assume prepared inputs rather than providing a
-general data-validation layer.
+columns must be complete.
 
 Load the functions and fit the mixed model:
 
@@ -70,16 +65,14 @@ mixed$tests
 Replace the column names and adjustment formula for your trait. Use `group = NULL`
 for pooled adjustment. The mixed model is `y = X beta + u_G + u_GxT + error`.
 The genetic kernel uses standardized dosages. The interaction kernel multiplies
-raw mean-imputed dosages by treatment, then standardizes the products, preserving
-the order used in the research scripts. Treatment must vary for this two-kernel fit.
+raw treatment indicator, then standardizes the products. Treatment must vary for this two-kernel fit.
 
 `components` reports each variance coefficient and its share of
 `tau_G + tau_GxT + sigma2`; these shares exclude fixed-effect variation.
 `tests` gives approximate zero-variance likelihood-ratio p-values using the
-half-point-mass/half-chi-square(1) reference. This approximation can be unreliable
-with small samples, similar kernels, or other components on the boundary.
+half-point-mass/half-chi-square(1) reference. 
 
-Run transfer learning from the raw phenotype and unimputed genotypes:
+Run transfer learning from the raw phenotype and genotypes:
 
 ```r
 cv <- cross_validate_transfer(
@@ -94,22 +87,10 @@ cv$summary
 
 Use `penalty = "lasso"` for L1 adaptation. PRS and treatment coefficients are
 unpenalized; SNP coefficients are penalized. Phenotype adjustment, imputation,
-and scaling are learned separately within every training split. The source PRS
-must be constructed without using target test outcomes.
+and scaling are learned separately within every training split.
 
 The inner folds choose minimum-MSE and one-standard-error lambdas; the outer
-folds measure treatment-only, PRS, and adapted prediction R-squared. The one-SE
-rule chooses a more regularized model and is not a confidence interval.
+folds measure treatment-only, PRS, and adapted prediction R-squared.
 `summary` gives mean and SD across outer folds; `predictions` holds held-out
-predictions. R-squared and its improvements can be negative.
-The candidate grid can be set with `lambda`; `outer_fold_id` can reuse splits.
+predictions.
 
-The simulation's `truth` applies to `y_model` with complete genotypes, before
-covariate adjustment and rank transformation. A single run illustrates the
-process and does not establish performance or guarantee improvement.
-
-## Upload to GitHub
-
-Upload this release folder, including `snp_lists/`. `MANIFEST.txt` lists the
-intended files, and `.gitignore` excludes generated outputs and other unlisted
-files. Choose your repository name, author/citation details, and license.

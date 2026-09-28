@@ -17,17 +17,7 @@ print(fixed)
 print(mixed$components)
 print(mixed$tests)
 
-# 3. Adapt the PRS with penalized SNP effects using nested cross-validation.
-# Raw outcomes and unimputed genotypes enter CV. Use penalty = "lasso" for L1.
-cv <- cross_validate_transfer(dat, sim$genotypes, outcome = "outcome", prs = "prs",
-  treatment_cols = c("treatment", "chemo"), adjustment = ~ age + I(age^2) + PC1 + PC2,
-  group = "sex", strata = interaction(dat$treatment, dat$chemo),
-  outer_folds = 3L, inner_folds = 3L, penalty = "ridge", seed = 42L)
-print(cv$summary)
-
 dir.create("outputs", showWarnings = FALSE)
 write.csv(fixed, "outputs/fixed_effect_comparisons.csv", row.names = FALSE)
 write.csv(mixed$components, "outputs/variance_components.csv", row.names = FALSE)
 write.csv(mixed$tests, "outputs/variance_tests.csv", row.names = FALSE)
-write.csv(cv$per_fold, "outputs/transfer_per_fold.csv", row.names = FALSE)
-write.csv(cv$summary, "outputs/transfer_summary.csv", row.names = FALSE)
