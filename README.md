@@ -1,103 +1,115 @@
 # PRS variance decomposition and transfer learning
 
-Reusable R functions for studying genetic variation beyond an existing polygenic
-risk score (PRS), and adapting that score to a target cohort with ridge or lasso
-regression. This is a portable extraction of the `mixedModel.R` and
-`transfer_learning_*_CV.R` workflows, with explicit inputs and synthetic examples.
+A small R workflow based on `mixedModel.R` and the transfer learning scripts:
+adjust a phenotype, estimate genetic variance components, and adapt an existing
+PRS with ridge or lasso SNP effects.
 
-**No participant data, real genotypes, real PRS weights, or study results are included.**
-The example generates all inputs locally from a random seed. Study data are not
-distributed through this repository.
+The [SNP lists](snp_lists/README.md) include variant IDs, alleles, and source-GWAS
+weights for Height, BMI, and WHR. No participant-level data are included.
 
-## Run the example
+## Run the simulation
 
-Use R with the `gaston` and `glmnet` packages. The release was tested with R 4.4.0,
-gaston 1.6, and glmnet 4.1-8. From this repository's root:
+Install R packages once, then run from this folder:
 
 ```sh
 Rscript --vanilla -e 'install.packages(c("gaston", "glmnet"), repos="https://cloud.r-project.org")'
 Rscript --vanilla examples/run_simulation.R
-Rscript --vanilla tests/run_tests.R
 ```
 
-Installation needs internet access; running the example needs no downloaded data.
-The default example has 240 simulated subjects and 80 independent SNPs, and uses
-3 outer and 3 inner folds. It writes synthetic summary tables, a PDF plot, and
-`sessionInfo.txt` to `outputs/`, which is excluded from version control. It also
-prints the estimates and prediction results. To choose a different output folder:
+The example generates 240 subjects and 80 independent SNPs with invented PRS
+weights. It runs the full workflow, prints results, and writes five summary CSVs
+to `outputs/`. It uses 3 outer and 3 inner folds for speed; the CV function
+defaults to 5 of each. Tested with R 4.4.0, gaston 1.6, and glmnet 4.1-8.
 
-```sh
-Rscript --vanilla examples/run_simulation.R /tmp/prs-demo
+| File | Purpose |
+| --- | --- |
+| `R/preprocessing.R` | Covariate adjustment, inverse-normal transformation, imputation, scaling |
+| `R/mixed_model.R` | PRS regressions, genetic kernels, REML estimates, variance-component p-values |
+| `R/transfer_learning.R` | Ridge/lasso adaptation and nested cross-validation |
+| `R/simulation.R` | Synthetic data generation |
+| `examples/run_simulation.R` | Complete example |
+| `snp_lists/` | Nine SNP tables and matching ID-only lists |
+
+## Use your own data
+
+Prepare a data frame `dat` and a numeric subjects-by-SNPs matrix `G`, with subjects
+in exactly the same order. For example, if genotype row names are sample IDs:
+
+```r
+G <- G[match(dat$id, rownames(G)), , drop = FALSE]
 ```
 
-These are sourceable R functions, not an installable R package. Load them with:
+IDs must be unique and matched. Outcome, PRS, treatment, group, and adjustment
+columns must be complete. Genotypes may contain `NA`; missing dosages are
+mean-imputed and constant/all-missing SNPs are dropped. Each training group needs
+enough subjects for the adjustment regression. Use independent subjects and
+non-collinear covariates; related subjects or repeated measures need a different
+fold design. These functions assume prepared inputs rather than providing a
+general data-validation layer.
+
+Load the functions and fit the mixed model:
 
 ```r
 source("R/preprocessing.R")
 source("R/mixed_model.R")
 source("R/transfer_learning.R")
-source("R/simulation.R")
+
+adjusted <- fit_outcome_transform(
+  dat, outcome = "outcome", adjustment = ~ age + I(age^2) + PC1 + PC2, group = "sex"
+)
+compare_prs_models(adjusted$train_y, dat$prs, dat$treatment)
+
+X <- cbind(Intercept = 1, PRS = dat$prs, Treatment = dat$treatment)
+mixed <- fit_variance_components(
+  adjusted$train_y, X, build_kernels(G, dat$treatment)
+)
+mixed$components
+mixed$tests
 ```
 
-## What the models do
+Replace the column names and adjustment formula for your trait. Use `group = NULL`
+for pooled adjustment. The mixed model is `y = X beta + u_G + u_GxT + error`.
+The genetic kernel uses standardized dosages. The interaction kernel multiplies
+raw mean-imputed dosages by treatment, then standardizes the products, preserving
+the order used in the research scripts. Treatment must vary for this two-kernel fit.
 
-The mixed model fits
+`components` reports each variance coefficient and its share of
+`tau_G + tau_GxT + sigma2`; these shares exclude fixed-effect variation.
+`tests` gives approximate zero-variance likelihood-ratio p-values using the
+half-point-mass/half-chi-square(1) reference. This approximation can be unreliable
+with small samples, similar kernels, or other components on the boundary.
 
-\[
-y = X\beta + u_G + u_{G\times T} + \epsilon, \qquad
-\operatorname{Var}(y\mid X) = \tau_G K_G + \tau_{G\times T}K_{G\times T} + \sigma_e^2 I.
-\]
+Run transfer learning from the raw phenotype and unimputed genotypes:
 
-`X` contains the intercept, selected PRS, and treatment. The functions construct
-the genetic and genetic-by-treatment kernels, fit variance components by REML,
-compare full and restricted models, and optionally profile a variance coefficient
-over a user-specified grid. Preliminary linear regressions also compare treatment,
-treatment plus PRS, and treatment plus PRS plus PRS-by-treatment.
+```r
+cv <- cross_validate_transfer(
+  dat, G, outcome = "outcome", prs = "prs",
+  treatment_cols = c("treatment", "chemo"),
+  adjustment = ~ age + I(age^2) + PC1 + PC2, group = "sex",
+  strata = interaction(dat$treatment, dat$chemo), penalty = "ridge", seed = 42
+)
+cv$per_fold
+cv$summary
+```
 
-Transfer learning fits
+Use `penalty = "lasso"` for L1 adaptation. PRS and treatment coefficients are
+unpenalized; SNP coefficients are penalized. Phenotype adjustment, imputation,
+and scaling are learned separately within every training split. The source PRS
+must be constructed without using target test outcomes.
 
-\[
-y = \alpha_0 + \alpha_1\mathrm{PRS}^{(G)} + C\gamma + Z\delta + \epsilon.
-\]
+The inner folds choose minimum-MSE and one-standard-error lambdas; the outer
+folds measure treatment-only, PRS, and adapted prediction R-squared. The one-SE
+rule chooses a more regularized model and is not a confidence interval.
+`summary` gives mean and SD across outer folds; `predictions` holds held-out
+predictions. R-squared and its improvements can be negative.
+The candidate grid can be set with `lambda`; `outer_fold_id` can reuse splits.
 
-The external PRS and treatment covariates are unpenalized. SNP adaptation
-coefficients `delta` receive a ridge or lasso penalty. Nested cross-validation
-selects the penalty and compares treatment-only, PRS, and adapted predictions on
-the same held-out subjects. Every fitted preprocessing step uses training rows.
+The simulation's `truth` applies to `y_model` with complete genotypes, before
+covariate adjustment and rank transformation. A single run illustrates the
+process and does not establish performance or guarantee improvement.
 
-## Functions and files
+## Upload to GitHub
 
-| File | Main functions | Purpose |
-| --- | --- | --- |
-| `R/preprocessing.R` | `align_genotypes()`, `fit_outcome_transform()`, `transform_outcome()` | Align samples; fit group-specific covariate adjustment and rank transformation |
-| `R/mixed_model.R` | `compare_prs_models()`, `build_kernels()`, `fit_variance_components()` | Fixed-effect comparisons and genetic variance decomposition |
-| `R/mixed_model.R` | `test_variance_component()`, `profile_variance_component()` | Named-component likelihood tests and approximate grid confidence sets |
-| `R/transfer_learning.R` | `cross_validate_transfer()` | Nested CV, minimum-error and one-SE penalty choices, held-out R-squared |
-| `R/transfer_learning.R` | `fit_transfer_model()`, `predict_transfer_model()` | Fit a selected model and predict in new samples |
-| `R/simulation.R` | `simulate_example_data()` | Generate an entirely synthetic demonstration |
-
-See [the data and usage guide](docs/USAGE.md) for input formats and examples,
-[the statistical notes](docs/METHODS.md) for definitions and differences from the
-research scripts, and [the publishing guide](docs/PUBLISHING.md) for creating a
-code-only GitHub repository.
-
-## Interpreting the example
-
-The example first fits a Gaussian phenotype whose generating variance coefficients
-are known, then demonstrates the original residual-adjustment and inverse-normal
-workflow. The generating coefficients apply to the first phenotype only; the
-rank transformation changes the scale. A single replicate demonstrates execution,
-not estimator bias, coverage, power, or guaranteed prediction improvement.
-
-Variance shares describe random variation conditional on the fixed effects.
-They are different from the PRS contribution to R-squared and from held-out
-prediction R-squared. Held-out R-squared and improvement can be negative.
-
-The implementation uses dense matrices and is intended as a readable reference
-and a small-data example. Kernel storage grows quadratically with sample size;
-large studies need an appropriate memory budget or a separately validated
-blockwise implementation.
-
-The model backends are documented in the
-[gaston reference](https://search.r-project.org/CRAN/refmans/gaston/html/lmm.aireml.html)
-and the [glmnet guide](https://glmnet.stanford.edu/articles/glmnet.html).
+Upload this release folder, including `snp_lists/`. `MANIFEST.txt` lists the
+intended files, and `.gitignore` excludes generated outputs and other unlisted
+files. Choose your repository name, author/citation details, and license.
