@@ -1,6 +1,6 @@
 # PRS variance decomposition and transfer learning
 
-A small R workflow based on `mixedModel.R` and the transfer learning scripts:
+R workflow for variance decomposition and the transfer learning scripts:
 adjust a phenotype, estimate genetic variance components, and adapt an existing
 PRS with ridge or lasso SNP effects.
 
